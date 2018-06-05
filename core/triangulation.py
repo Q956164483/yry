@@ -24,20 +24,17 @@ def rect_contains(rect, point):
 
 def measure_triangle(image, points):
     rect = (0, 0, image.shape[1], image.shape[0])
+
     sub_div = cv2.Subdiv2D(rect)
 
-    for p in points:
-        sub_div.insert(p)
+    sub_div.insert(points)
 
     triangle_list = sub_div.getTriangleList()
 
     triangle = []
-    pt = []
 
     for t in triangle_list:
-        pt.append((t[0], t[1]))
-        pt.append((t[2], t[3]))
-        pt.append((t[4], t[5]))
+        pt = [(t[0], t[1]), (t[2], t[3]), (t[4], t[5])]
 
         pt1 = (t[0], t[1])
         pt2 = (t[2], t[3])
@@ -51,8 +48,6 @@ def measure_triangle(image, points):
                         ind.append(k)
             if len(ind) == 3:
                 triangle.append((ind[0], ind[1], ind[2]))
-
-        pt = []
 
     return triangle
 
