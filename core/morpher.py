@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2017/9/2 13:40
-# @Author  : 郑梓斌
 
 import cv2
+import os
 import numpy as np
 import time
-import os
+import math
 
 import core
 
 
 def transformation_points(src_img, src_points, dst_img, dst_points):
+    """
+    运用普氏分析将要融合的人脸转换到模板图角度
+    :param src_img: 模板人脸图片
+    :param src_points: 模板人脸坐标点
+    :param dst_img: 目标人脸图片
+    :param dst_points: 目标人脸坐标点
+    :return: 转换后的图像
+    """
     src_points = src_points.astype(np.float64)
     dst_points = dst_points.astype(np.float64)
 
@@ -39,11 +46,26 @@ def transformation_points(src_img, src_points, dst_img, dst_points):
     return output
 
 
-def tran_matrix(src_img, src_points, dst_img, dst_points):
-    h = cv2.findHomography(dst_points, src_points)
-    output = cv2.warpAffine(dst_img, h[0][:2], (src_img.shape[1], src_img.shape[0]),
-                            borderMode=cv2.BORDER_TRANSPARENT,
-                            flags=cv2.WARP_INVERSE_MAP)
+def tran_similarity(src_img, src_points, dst_img, dst_points):
+    s60 = math.sin(60 * math.pi / 180)
+    c60 = math.cos(60 * math.pi / 180)
+
+    in_pts = np.copy(dst_points).tolist()
+    out_pts = np.copy(src_points).tolist()
+
+    x_in = c60 * (in_pts[0][0] - in_pts[1][0]) - s60 * (in_pts[0][1] - in_pts[1][1]) + in_pts[1][0]
+    y_in = s60 * (in_pts[0][0] - in_pts[1][0]) + c60 * (in_pts[0][1] - in_pts[1][1]) + in_pts[1][1]
+
+    in_pts.append([np.int(x_in), np.int(y_in)])
+
+    x_out = c60 * (out_pts[0][0] - out_pts[1][0]) - s60 * (out_pts[0][1] - out_pts[1][1]) + out_pts[1][0]
+    y_out = s60 * (out_pts[0][0] - out_pts[1][0]) + c60 * (out_pts[0][1] - out_pts[1][1]) + out_pts[1][1]
+
+    out_pts.append([np.int(x_out), np.int(y_out)])
+
+    m = cv2.estimateRigidTransform(np.array([in_pts]), np.array([out_pts]), False)
+
+    output = cv2.warpAffine(dst_img, m, (src_img.shape[1], src_img.shape[0]))
 
     return output
 
@@ -67,7 +89,15 @@ def correct_color(img1, img2, landmark):
 
 
 def tran_src(src_img, src_points, dst_points, face_area=None):
-    jaw = core.JAW_END
+    """
+    应用三角仿射转换将模板图人脸轮廓仿射成目标图像人脸轮廓
+    :param src_img:
+    :param src_points:
+    :param dst_points:
+    :param face_area:
+    :return:
+    """
+    # jaw = core.JAW_END
 
     dst_list = dst_points \
                + core.matrix_rectangle(face_area[0], face_area[1], face_area[2], face_area[3]) \
@@ -77,34 +107,34 @@ def tran_src(src_img, src_points, dst_points, face_area=None):
                + core.matrix_rectangle(face_area[0], face_area[1], face_area[2], face_area[3]) \
                + core.matrix_rectangle(0, 0, src_img.shape[1], src_img.shape[0])
 
-    jaw_points = []
+    # jaw_points = []
+    #
+    # for i in range(0, jaw):
+    #     jaw_points.append(dst_list[i])
+    #     jaw_points.append(src_list[i])
+    #
+    # warp_jaw = cv2.convexHull(np.array(jaw_points), returnPoints=False)
+    # warp_jaw = warp_jaw.tolist()
+    #
+    # for i in range(0, len(warp_jaw)):
+    #     warp_jaw[i] = warp_jaw[i][0]
+    #
+    # warp_jaw.sort()
+    #
+    # if len(warp_jaw) <= jaw:
+    #     dst_list = dst_list[jaw - len(warp_jaw):]
+    #     src_list = src_list[jaw - len(warp_jaw):]
+    #     for i in range(0, len(warp_jaw)):
+    #         dst_list[i] = jaw_points[int(warp_jaw[i])]
+    #         src_list[i] = jaw_points[int(warp_jaw[i])]
+    # else:
+    #     for i in range(0, jaw):
+    #         if len(warp_jaw) > jaw and warp_jaw[i] == 2 * i and warp_jaw[i + 1] == 2 * i + 1:
+    #             warp_jaw.remove(2 * i)
+    #
+    #         dst_list[i] = jaw_points[int(warp_jaw[i])]
 
-    for i in range(0, jaw):
-        jaw_points.append(dst_list[i])
-        jaw_points.append(src_list[i])
-
-    warp_jaw = cv2.convexHull(np.array(jaw_points), returnPoints=False)
-    warp_jaw = warp_jaw.tolist()
-
-    for i in range(0, len(warp_jaw)):
-        warp_jaw[i] = warp_jaw[i][0]
-
-    warp_jaw.sort()
-
-    if len(warp_jaw) <= jaw:
-        dst_list = dst_list[jaw - len(warp_jaw):]
-        src_list = src_list[jaw - len(warp_jaw):]
-        for i in range(0, len(warp_jaw)):
-            dst_list[i] = jaw_points[int(warp_jaw[i])]
-            src_list[i] = jaw_points[int(warp_jaw[i])]
-    else:
-        for i in range(0, jaw):
-            if len(warp_jaw) > jaw and warp_jaw[i] == 2 * i and warp_jaw[i + 1] == 2 * i + 1:
-                warp_jaw.remove(2 * i)
-
-            dst_list[i] = jaw_points[int(warp_jaw[i])]
-
-    dt = core.measure_triangle(src_img, dst_list)
+    dt = core.measure_triangle(src_img.shape, dst_list)
 
     res_img = np.zeros(src_img.shape, dtype=src_img.dtype)
 
@@ -121,11 +151,13 @@ def tran_src(src_img, src_points, dst_points, face_area=None):
     return res_img
 
 
-def merge_img(src_img, dst_img, dst_matrix, dst_points, k_size=None, mat_multiple=None):
-    face_mask = np.zeros(src_img.shape, dtype=src_img.dtype)
+def merge_img(src_img, dst_img, dst_points, k_size=None, mat_multiple=None, is_peach=None):
+    face_mask = np.zeros(src_img.shape[:2], dtype=src_img.dtype)
 
-    for group in core.OVERLAY_POINTS:
-        cv2.fillConvexPoly(face_mask, cv2.convexHull(dst_matrix[group]), (255, 255, 255))
+    overlay = core.PEACH_POINTS if is_peach else core.OVERLAY_POINTS
+
+    for group in overlay:
+        cv2.fillConvexPoly(face_mask, cv2.convexHull(np.array(dst_points)[group]), (255, 255, 255))
 
     r = cv2.boundingRect(np.float32([dst_points[:core.FACE_END]]))
 
@@ -141,20 +173,23 @@ def merge_img(src_img, dst_img, dst_matrix, dst_points, k_size=None, mat_multipl
     return cv2.seamlessClone(np.uint8(dst_img), src_img, face_mask, center, cv2.NORMAL_CLONE)
 
 
-def morph_img(src_img, src_points, dst_img, dst_points, alpha=0.5):
-    morph_points = []
-
+def morph_img(src_img, src_points, dst_img, dst_points, alpha=0.5, show_bg=None):
     src_img = src_img.astype(np.float32)
     dst_img = dst_img.astype(np.float32)
 
-    res_img = np.zeros(src_img.shape, src_img.dtype)
+    if show_bg:
+        res_img = src_img.copy()
+    else:
+        res_img = np.zeros(src_img.shape, dtype=src_img.dtype)
+
+    morph_points = []
 
     for i in range(0, len(src_points)):
         x = (1 - alpha) * src_points[i][0] + alpha * dst_points[i][0]
         y = (1 - alpha) * src_points[i][1] + alpha * dst_points[i][1]
         morph_points.append((x, y))
 
-    dt = core.measure_triangle(src_img, morph_points)
+    dt = core.measure_triangle(src_img.shape, src_points)
 
     for i in range(0, len(dt)):
         t1 = []
@@ -168,40 +203,42 @@ def morph_img(src_img, src_points, dst_img, dst_points, alpha=0.5):
 
         core.morph_triangle(src_img, dst_img, res_img, t1, t2, t, alpha)
 
-    return res_img
+    return res_img, morph_points
 
 
-def face_merge(dst_img, src_img, out_img,
-               face_area, alpha=0.75,
-               k_size=None, mat_multiple=None):
-    src_matrix, src_points, err = core.face_points(src_img)
-    dst_matrix, dst_points, err = core.face_points(dst_img)
-
+def face_merge(dst_img, dst_points, src_img, src_points,
+               out_img, face_area, alpha=0.75,
+               k_size=None, mat_multiple=None, is_peach=None):
     src_img = cv2.imread(src_img, cv2.IMREAD_COLOR)
     dst_img = cv2.imread(dst_img, cv2.IMREAD_COLOR)
 
-    dst_img = transformation_points(src_img=src_img, src_points=src_matrix[core.FACE_POINTS],
-                                    dst_img=dst_img, dst_points=dst_matrix[core.FACE_POINTS])
+    dst_img = tran_similarity(src_img, [src_points[core.LEFT_EYE_CENTER],
+                                        src_points[core.RIGHT_EYE_CENTER],
+                                        src_points[core.NOSE_TOP]],
+                              dst_img, [dst_points[core.LEFT_EYE_CENTER],
+                                        dst_points[core.RIGHT_EYE_CENTER],
+                                        dst_points[core.NOSE_TOP]])
 
     trans_file = 'images/' + str(int(time.time() * 1000)) + '.jpg'
     cv2.imwrite(trans_file, dst_img)
-    _, dst_points, err = core.face_points(trans_file)
+    dst_points, err = core.face_points(trans_file)
 
-    dst_img = morph_img(src_img, src_points, dst_img, dst_points, alpha)
+    dst_img, dst_points = morph_img(src_img, src_points, dst_img, dst_points, alpha, show_bg=True)
 
     morph_file = 'images/' + str(int(time.time() * 1000)) + '.jpg'
     cv2.imwrite(morph_file, dst_img)
-    dst_matrix, dst_points, err = core.face_points(morph_file)
+    dst_points, err = core.face_points(morph_file)
 
+    start = time.clock()
     src_img = tran_src(src_img, src_points, dst_points, face_area)
+    print('模特图变形耗时：', time.clock() - start)
 
-    dst_img = merge_img(src_img, dst_img, dst_matrix, dst_points, k_size, mat_multiple)
+    start = time.clock()
+    dst_img = merge_img(src_img, dst_img, src_points, k_size, mat_multiple, is_peach)
+    print('人脸替换耗时：', time.clock() - start)
 
     os.remove(trans_file)
-    os.remove(trans_file + '.txt')
-
     os.remove(morph_file)
-    os.remove(morph_file + '.txt')
 
     cv2.imwrite(out_img, dst_img)
 

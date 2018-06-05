@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2017/9/2 13:40
-# @Author  : 郑梓斌
 
 import cv2
 import numpy as np
@@ -15,15 +13,15 @@ def rect_contains(rect, point):
         return False
     elif point[1] < rect[1]:
         return False
-    elif point[0] > rect[2]:
+    elif point[0] > rect[0] + rect[2]:
         return False
-    elif point[1] > rect[3]:
+    elif point[1] > rect[1] + rect[3]:
         return False
     return True
 
 
-def measure_triangle(image, points):
-    rect = (0, 0, image.shape[1], image.shape[0])
+def measure_triangle(shape, points):
+    rect = (0, 0, shape[1], shape[0])
 
     sub_div = cv2.Subdiv2D(rect)
 
